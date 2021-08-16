@@ -1,11 +1,11 @@
+import sqlite3
+
 import discord
 from discord.ext import commands
 from constants import *
 import datetime
-import json
-from os.path import exists
 from os import mkdir
-from config import IDEALIST, SUPPORTER, OPENER, MEMBER, ROLE
+from config import IDEALIST, SUPPORTER, OPENER, MEMBER, ROLE, GUILD_ID
 
 from error_handler import CommandErrorHandler
 
@@ -14,7 +14,27 @@ class RuMineCog(commands.Cog):
     """Набор фунций для управления ботом"""
 
     def __init__(self, bot):
-        self.data = json.load(open(DATA_JSON_PATH, 'r')) if exists(DATA_JSON_PATH) else {}
+        try:
+            mkdir(DIR)
+        except FileExistsError:
+            pass
+        finally:
+            self.con = sqlite3.connect(DATA_DB_PATH)
+            cur = self.con.cursor()
+            try:
+                cur.execute('''CREATE TABLE users (
+                            user_id  STRING  PRIMARY KEY,
+                            messages INTEGER,
+                            voice    INTEGER,
+                            bonus    INTEGER,
+                            total    INTEGER);''')
+                self.con.commit()
+            except sqlite3.OperationalError:
+                pass
+            except sqlite3.DatabaseError:
+                pass
+        self.cur = self.con.cursor()
+
         self.voice = {}
         self.bot = bot
 
@@ -23,22 +43,27 @@ class RuMineCog(commands.Cog):
         if ctx.guild is None:
             return
 
+        if ctx.guild.id != GUILD_ID:
+            return
+
         author = ctx.author.id
-        user = await bot.fetch_user(int(author))
+        user = await bot.fetch_user(author)
         emb = discord.Embed(color=GREY)
-        # emb.set_author(name='Баллы:', icon_url=ctx.author.avatar_url)
-        if str(author) in self.data:
+        result = self.cur.execute(f"""SELECT * FROM users 
+                                      WHERE user_id = '{author}'""").fetchall()
+        if result:
+
             emb.add_field(name=f'Твои баллы:',
-                          value=f'{sum(self.data[str(author)].values())}',
+                          value=f'{result[0][4]}',
                           inline=False)
             emb.add_field(name=f'За активность в текстовых каналах:',
-                          value=f'{self.data[str(author)]["messages"]}',
+                          value=f'{result[0][1]}',
                           inline=False)
             emb.add_field(name=f'За активность в голосовых каналах:',
-                          value=f'{self.data[str(author)]["voice"]}',
+                          value=f'{result[0][2]}',
                           inline=False)
             emb.add_field(name=f'Бонус / штраф:',
-                          value=f'{self.data[str(author)]["bonus"]}',
+                          value=f'{result[0][3]}',
                           inline=False)
         else:
             emb.add_field(name=f'Твои баллы:',
@@ -52,22 +77,36 @@ class RuMineCog(commands.Cog):
         if ctx.guild is None:
             return
 
-        if aim is None or points is None:
-            emb = discord.Embed(color=RED)
-            emb.set_author(name='Ошибка синтаксиса:')
-            emb.add_field(name='использование команды:',
-                          value='!добавитьбаллы @name <кол-во>',
-                          inline=False)
-            await ctx.semd(embed=emb)
+        if ctx.guild.id != GUILD_ID:
             return
+
+        # if aim is None or points is None:
+        #     emb = discord.Embed(color=RED)
+        #     emb.set_author(name='Ошибка синтаксиса:')
+        #     emb.add_field(name='использование команды:',
+        #                   value='!добавитьбаллы @name <кол-во>',
+        #                   inline=False)
+        #     await ctx.semd(embed=emb)
+        #     return
         aim = await bot.fetch_user(int(''.join(i for i in aim if i.isdigit())))
         await aim.send(f"Поздравляю! Тебе начислили бонусные баллы: {int(points)}")
 
-        if str(aim.id) in self.data:
-            self.data[str(aim.id)]['bonus'] += int(points)
+        result = self.cur.execute(f"""SELECT * FROM users
+                                      WHERE user_id = '{aim.id}'""").fetchall()
+        if result:
+            self.cur.execute(f"""UPDATE users
+                                 SET bonus = {result[0][3] + int(points)},
+                                 total = {result[0][4] + int(points)}
+                                 WHERE user_id = '{aim.id}'""")
+            # self.data[str(aim.id)]['bonus'] += int(points)
         else:
-            self.data[str(aim.id)] = {'messages': 0, 'voice': 0, 'bonus': int(points)}
-        await self.roles_check(ctx.channel.guild, ctx.author)
+            self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus, total)
+                                 VALUES('{aim.id}',0,0,{int(points)},{int(points)})""")
+
+            # self.data[str(aim.id)] = {'messages': 0, 'voice': 0, 'bonus': int(points)}
+
+        self.con.commit()
+        await self.roles_check(ctx.channel.guild, ctx.author, result[0][4])
 
     @commands.command(name="снятьбаллы")
     @commands.has_role(ROLE)
@@ -75,19 +114,35 @@ class RuMineCog(commands.Cog):
         if ctx.guild is None:
             return
 
+        if ctx.guild.id != GUILD_ID:
+            return
+
         aim = await bot.fetch_user(int(''.join(i for i in aim if i.isdigit())))
         await aim.send(f"Мне очень жаль! Тебя оштрафовали: {int(points)}")
 
-        if str(aim.id) in self.data:
-            self.data[str(aim.id)]['bonus'] -= int(points)
+        result = self.cur.execute(f"""SELECT * FROM users
+                                      WHERE user_id = '{aim.id}'""").fetchall()
+
+        if result:
+            self.cur.execute(f"""UPDATE users
+                                         SET bonus = {result[0][3] - int(points)},
+                                         total = {result[0][4] - int(points)}
+                                         WHERE user_id = '{aim.id}'""")
         else:
-            self.data[str(aim.id)] = {'messages': 0, 'voice': 0, 'bonus': -int(points)}
-        await self.roles_check(ctx.channel.guild, ctx.author)
+            self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus)
+                                         VALUES('{aim.id}',0,0,{-int(points)},{-int(points)})""")
+
+        self.con.commit()
+        await self.roles_check(ctx.channel.guild, ctx.author, result[0][4])
 
     @commands.command(name="инфо")
     async def info(self, ctx):
         if ctx.guild is None:
             return
+
+        if ctx.guild.id != GUILD_ID:
+            return
+
         aim = await bot.fetch_user(ctx.author.id)
         await aim.send(f"Информация.")
 
@@ -95,12 +150,15 @@ class RuMineCog(commands.Cog):
     async def top(self, ctx):
         if ctx.guild is None:
             return
-        output = []
-        for person, points in self.data.items():
-            output.append((person, sum(points.values())))
-            # output.append(((await bot.fetch_user(int(person))).mention, sum(points.values())))
-        output.sort(key=lambda x: x[1], reverse=True)
-        value = '\n'.join(map(lambda x: f'{x[0]} • {x[1]}', output[:10]))
+
+        if ctx.guild.id != GUILD_ID:
+            return
+
+        result = self.cur.execute(f"""SELECT user_id, total
+                                      FROM users ORDER BY total DESC LIMIT 10""").fetchall()
+
+        value = '\n'.join(map(lambda x: f'<@{x[0]}> • {x[1]}', result))
+
         emb = discord.Embed(color=GREEN)
         emb.add_field(name='Лидеры:',
                       value=value,
@@ -117,32 +175,55 @@ class RuMineCog(commands.Cog):
         if isinstance(ctx.channel, discord.DMChannel):
             return
 
+        if ctx.guild.id != GUILD_ID:
+            return
+
         author = ctx.author.id
 
-        if str(author) in self.data:
-            self.data[str(author)]['messages'] += 1
-            await self.roles_check(ctx.channel.guild, ctx.author)
+        result = self.cur.execute(f"""SELECT * FROM users
+                                      WHERE user_id = '{author}'""").fetchall()
+        if result:
+            self.cur.execute(f"""UPDATE users
+                                         SET messages = {result[0][1] + 1},
+                                         total = {result[0][4] + 1}
+                                         WHERE user_id = '{author}'""")
+            await self.roles_check(ctx.channel.guild, ctx.author, result[0][4])
         else:
-            self.data[str(author)] = {'messages': 1, 'voice': 0, 'bonus': 0}
+            self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus, total)
+                                         VALUES('{author}',1,0,0,1)""")
+        self.con.commit()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        if member.bot:
+            return
         member_id = member.id
         if before.channel is None and after.channel is not None:
             """Подключение к войсу"""
+            if after.channel.guild.id != GUILD_ID:
+                return
             self.voice[str(member_id)] = int(datetime.datetime.now().timestamp())
 
         elif before.channel is not None and after.channel is None:
             """Отключение от войса"""
+            if before.channel.guild.id != GUILD_ID:
+                return
             voice = int(datetime.datetime.now().timestamp() - self.voice[str(member_id)]) // 300
-            if str(member_id) in self.data:
-                self.data[str(member_id)]['voice'] += voice
+            result = self.cur.execute(f"""SELECT * FROM users
+                                                  WHERE user_id = '{member_id}'""").fetchall()
+            if result:
+                self.cur.execute(f"""UPDATE users
+                                     SET voice = {result[0][2] + voice},
+                                     total = {result[0][4] + voice}
+                                     WHERE user_id = '{member_id}'""")
             else:
-                self.data[str(member_id)] = {'messages': 0, 'voice': voice, 'bonus': 0}
-            await self.roles_check(before.channel.guild, member)
+                self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus,total)
+                                                     VALUES('{member_id}',0,{voice},0,{voice})""")
+            self.con.commit()
+            await self.roles_check(before.channel.guild, member, result[0][4])
 
-    async def roles_check(self, guild, user):
-        total_points = sum(self.data[str(user.id)].values())
+    @staticmethod
+    async def roles_check(guild, user, total_points):
         if total_points > 30000:
             discord_role = guild.get_role(IDEALIST)
             await user.add_roles(discord_role)
@@ -155,16 +236,6 @@ class RuMineCog(commands.Cog):
         if total_points > 100:
             discord_role = guild.get_role(OPENER)
             await user.add_roles(discord_role)
-        self.save_changes()
-
-    def save_changes(self):
-        try:
-            mkdir(DIR)
-        except FileExistsError:
-            pass
-        finally:
-            with open(DATA_JSON_PATH, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=4)
 
 
 bot = commands.Bot(command_prefix=COMMAND_PREFIX)

@@ -37,11 +37,11 @@ class CommandErrorHandler(commands.Cog):
             emb = discord.Embed(color=RED)
             emb.set_author(name='Ошибка синтаксиса:')
             emb.add_field(name='Использование команды:',
-                          value=f'!{ctx.command} @name <кол-во>',
+                          value=f'{COMMAND_PREFIX}{ctx.command} @name <кол-во>',
                           inline=False)
             await ctx.send(embed=emb)
             return
         else:
             # All other Errors not returned come here. And we can just print the default TraceBack.
             print('Обнаружена ошибка в команде {}:'.format(ctx.command), file=sys.stderr)
-            traceback.print_exception(type(error), error, error.__traceback_, file=sys.stderr)
+            traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
