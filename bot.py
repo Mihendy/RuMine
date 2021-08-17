@@ -80,7 +80,9 @@ class RuMineCog(commands.Cog):
         if ctx.guild.id != GUILD_ID:
             return
 
-        await ctx.send(f"{aim}, поздравляю! Тебе начислили бонусные баллы: {int(points)}")
+        aim = await bot.fetch_user(int(''.join(i for i in aim if i.isdigit())))
+
+        await ctx.send(f"{aim.mention}, поздравляю! Тебе начислили бонусные баллы: {int(points)}")
 
         result = self.cur.execute(f"""SELECT * FROM users
                                       WHERE user_id = '{aim.id}'""").fetchall()
@@ -89,12 +91,12 @@ class RuMineCog(commands.Cog):
                                  SET bonus = {result[0][3] + int(points)},
                                  total = {result[0][4] + int(points)}
                                  WHERE user_id = '{aim.id}'""")
+            await self.roles_check(ctx.channel.guild, ctx.author, result[0][4] + int(points))
         else:
-            self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus, total)
+            self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus,total)
                                  VALUES('{aim.id}',0,0,{int(points)},{int(points)})""")
-
+            await self.roles_check(ctx.channel.guild, ctx.author, int(points))
         self.con.commit()
-        await self.roles_check(ctx.channel.guild, ctx.author, result[0][4])
 
     @commands.has_role(ROLE)
     @commands.command(pass_context=True, aliases=['remove_points', 'снятьбаллы'])
@@ -105,8 +107,8 @@ class RuMineCog(commands.Cog):
         if ctx.guild.id != GUILD_ID:
             return
 
-        # aim = await bot.fetch_user(int(''.join(i for i in aim if i.isdigit())))
-        await aim.send(f"{aim}, мне очень жаль! Тебя оштрафовали: {int(points)}")
+        aim = await bot.fetch_user(int(''.join(i for i in aim if i.isdigit())))
+        await ctx.send(f"{aim.mention}, мне очень жаль! Тебя оштрафовали: {int(points)}")
 
         result = self.cur.execute(f"""SELECT * FROM users
                                       WHERE user_id = '{aim.id}'""").fetchall()
@@ -117,11 +119,10 @@ class RuMineCog(commands.Cog):
                                          total = {result[0][4] - int(points)}
                                          WHERE user_id = '{aim.id}'""")
         else:
-            self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus)
+            self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus,total)
                                          VALUES('{aim.id}',0,0,{-int(points)},{-int(points)})""")
 
         self.con.commit()
-        await self.roles_check(ctx.channel.guild, ctx.author, result[0][4])
 
     @commands.command(pass_context=True, aliases=['info', 'инфо'])
     async def information(self, ctx):
@@ -191,7 +192,8 @@ class RuMineCog(commands.Cog):
             await self.roles_check(ctx.channel.guild, ctx.author, result[0][4])
         else:
             self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus, total)
-                                         VALUES('{author}',{"%.1f" % points},0,0,{"%.1f" % points})""")
+                                         VALUES('{author}',{"%.1f" % points},0,0,{"%.1f" % points})
+                                """)
         self.con.commit()
 
     @commands.Cog.listener()
@@ -217,11 +219,12 @@ class RuMineCog(commands.Cog):
                                      SET voice = {result[0][2] + voice},
                                      total = {result[0][4] + voice}
                                      WHERE user_id = '{member_id}'""")
+                await self.roles_check(before.channel.guild, member, result[0][4] + voice)
             else:
                 self.cur.execute(f"""INSERT INTO users(user_id,messages,voice,bonus,total)
                                                      VALUES('{member_id}',0,{voice},0,{voice})""")
+                await self.roles_check(before.channel.guild, member, voice)
             self.con.commit()
-            await self.roles_check(before.channel.guild, member, result[0][4])
 
     @staticmethod
     async def roles_check(guild, user, total_points):
