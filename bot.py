@@ -34,8 +34,8 @@ class RuMineCog(commands.Cog):
             except sqlite3.DatabaseError:
                 pass
         self.cur = self.con.cursor()
-
         self.voice = {}
+        bot.remove_command('help')
         self.bot = bot
         self.messages = {}
 
@@ -124,7 +124,7 @@ class RuMineCog(commands.Cog):
 
         self.con.commit()
 
-    @commands.command(pass_context=True, aliases=['info', 'инфо'])
+    @commands.command(pass_context=True, aliases=['help', 'info', 'инфо'])
     async def information(self, ctx):
         if ctx.guild is None:
             return
