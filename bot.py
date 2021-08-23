@@ -142,10 +142,10 @@ class RuMineCog(commands.Cog):
         if ctx.guild.id != GUILD_ID:
             return
 
-        result = self.cur.execute(f"""SELECT user_id, total
-                                      FROM users ORDER BY total DESC LIMIT 10""").fetchall()
+        result = enumerate(self.cur.execute(f"""SELECT user_id, total
+                                      FROM users ORDER BY total DESC LIMIT 10""").fetchall())
 
-        value = '\n'.join(map(lambda x: f'<@{x[0]}> • {x[1]}', result))
+        value = '\n'.join(map(lambda x: f'`{x[0] + 1}.` <@{x[1][0]}> • {x[1][1]}', result))
 
         emb = discord.Embed(color=GREEN)
         emb.add_field(name='Лидеры:',
@@ -173,13 +173,23 @@ class RuMineCog(commands.Cog):
         if author not in self.messages:
             self.messages[author] = int(datetime.datetime.now().timestamp())
             points = 1
+        elif author in list(map(lambda x: x.id, ctx.guild.premium_subscribers)):
+            dt = int(datetime.datetime.now().timestamp())
+            if dt - self.messages[author] > 65:
+                points = 1.5
+            elif dt - self.messages[author] > 45:
+                points = 1
+            elif dt - self.messages[author] > 15:
+                points = 0.5
+            else:
+                points = 0.1
         else:
             dt = int(datetime.datetime.now().timestamp())
-            if dt - self.messages[author] > 60:
+            if dt - self.messages[author] > 65:
                 points = 1
-            elif dt - self.messages[author] > 40:
+            elif dt - self.messages[author] > 45:
                 points = 0.5
-            elif dt - self.messages[author] > 20:
+            elif dt - self.messages[author] > 15:
                 points = 0.2
             else:
                 points = 0
