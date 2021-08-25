@@ -171,7 +171,7 @@ class RuMineCog(commands.Cog):
         result = self.cur.execute(f"""SELECT * FROM users
                                       WHERE user_id = '{author}'""").fetchall()
 
-        premium_subscribers = tuple(map(lambda x: x.id, await ctx.guild.premium_subscribers))
+        premium_subscribers = tuple(map(lambda x: x.id, ctx.guild.premium_subscribers))
 
         print(premium_subscribers)
 
