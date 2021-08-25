@@ -260,7 +260,8 @@ class RuMineCog(commands.Cog):
             await user.add_roles(discord_role)
 
 
-bot = commands.Bot(command_prefix=COMMAND_PREFIX)
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 bot_cog = RuMineCog(bot)
 bot.add_cog(bot_cog)
 bot.add_cog(CommandErrorHandler(bot))
