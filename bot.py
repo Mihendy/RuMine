@@ -170,10 +170,17 @@ class RuMineCog(commands.Cog):
 
         result = self.cur.execute(f"""SELECT * FROM users
                                       WHERE user_id = '{author}'""").fetchall()
+
+        premium_subscribers = tuple(map(lambda x: x.id, ctx.guild.premium_subscribers))
+
+        print(premium_subscribers)
+
+        print(author)
+
         if author not in self.messages:
             self.messages[author] = int(datetime.datetime.now().timestamp())
             points = 1
-        elif author in list(map(lambda x: x.id, ctx.guild.premium_subscribers)):
+        elif author in premium_subscribers:
             dt = int(datetime.datetime.now().timestamp())
             if dt - self.messages[author] > 65:
                 points = 1.5
