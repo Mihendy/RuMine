@@ -173,11 +173,6 @@ class RuMineCog(commands.Cog):
 
         premium_subscribers = tuple(map(lambda x: x.id, ctx.guild.premium_subscribers))
 
-        print(ctx.guild.premium_subscribers)
-        print(premium_subscribers)
-
-        print(author)
-
         if author not in self.messages:
             self.messages[author] = int(datetime.datetime.now().timestamp())
             points = 1
