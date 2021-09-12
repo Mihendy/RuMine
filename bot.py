@@ -37,6 +37,7 @@ class RuMineCog(commands.Cog):
         self.voice = {}
         bot.remove_command('help')
         self.bot = bot
+        self.bot.activity = discord.Activity(name='!help', type=discord.ActivityType.listening)
         self.messages = {}
 
     @commands.command(pass_context=True, aliases=['points', 'баллы'])
@@ -148,6 +149,16 @@ class RuMineCog(commands.Cog):
         value = '\n'.join(map(lambda x: f'`{x[0] + 1}.` <@{x[1][0]}> • {x[1][1]}', result))
 
         emb = discord.Embed(color=GREEN)
+
+        result = self.cur.execute(
+            f"""SELECT user_id, total FROM users ORDER BY total DESC LIMIT {TOP_LIMIT}""").fetchall()
+
+        if ctx.author.id in list(map(lambda x: x[0], result)):
+            ind = list(map(lambda x: x[0], result)).index(ctx.author.id)
+            if ind not in range(0, 10):
+                value += '\n`...`\n' + f'`{ind + 1}.` <@{result[ind][0]}> • {result[ind][1]}'
+        else:
+            value += '\n`...`\n' + f'*Вы не входите в топ {TOP_LIMIT} по рейтингу*'
         emb.add_field(name='Лидеры:',
                       value=value,
                       inline=False)
